@@ -1,0 +1,212 @@
+template <bool useNCP, bool useFlux, bool useViscousFlux, int numQuadPoints, typename SolverType>
+double kernels::finitevolumes::riemannsolvers::c::engquistOsher(
+    SolverType&         solver,
+    double* const       fnL,
+    double* const       fnR,
+    const double* const qL,
+    const double* const qR,
+    const int           direction) {
+    
+  if ( useViscousFlux ) {
+    std::cerr << "Only implemented for PDEs with non-viscous conservative flux and/or NCP." << std::endl;
+    std::terminate();
+  }
+  constexpr int numberOfVariables  = SolverType::NumberOfVariables;
+  constexpr int numberOfParameters = SolverType::NumberOfParameters;
+  
+  double s_max = -1.0;
+  double GAMMA = 1.4;
+  
+  if (direction == 0) {
+  
+  // 1. Calculate q_(1/3) and q_(2/3) using P-ordering
+  
+  double q13[5];
+  double q23[5];
+  
+  double z = (GAMMA-1) / (2*GAMMA);
+  double irho0 = 1 / qL[0];
+  double irho1 = 1 / qR[0];
+  double p0 = (GAMMA-1)*(qL[4]-0.5*irho0*(qL[1]*qL[1]+qL[2]*qL[2]));
+  double p1 = (GAMMA-1)*(qR[4]-0.5*irho1*(qR[1]*qR[1]+qR[2]*qR[2]));
+  double H = std::pow(p0/p1,z);
+  double a0 = std::sqrt(GAMMA*p0*irho0);
+  double a1 = std::sqrt(GAMMA*p1*irho1); 
+  double p_star = std::pow(
+  (a0+a1-(irho1*qR[1]-irho0*qL[1])*(GAMMA-1)*0.5) / 
+  (a0/std::pow(p0,z)+a1/std::pow(p1,z)), 1/z
+  );
+  double u_star = 
+  (H*irho0*qL[1]/a0 + irho1*qR[1]/a1 + 2*(H-1)/(GAMMA-1)) / 
+  (H/a0 + 1/a1); 
+  
+  double rho13 = qL[0]*std::pow(p_star/p0,1/GAMMA);
+  double rho23 = qR[0]*std::pow(p_star/p1,1/GAMMA);
+  
+  q13[0] = rho13;
+  q13[1] = rho13*u_star;
+  q13[2] = rho13*irho0*qL[2];
+  q13[3] = rho13*irho0*qL[3];
+  q13[4] = 
+  0.5*rho13*(u_star*u_star+(irho0*qL[2])*(irho0*qL[2])) + 
+  p_star/(GAMMA-1);
+  
+  q23[0] = rho23;
+  q23[1] = rho23*u_star;
+  q23[2] = rho23*irho1*qR[2];
+  q23[3] = rho23*irho1*qR[3];
+  q23[4] = 
+  0.5*rho23*(u_star*u_star+(irho1*qR[2])*(irho1*qR[2])) + 
+  p_star/(GAMMA-1);
+  
+  // 2. Calculate qs0 and qs1
+  
+  double qs0[5];
+  double qs1[5];
+  
+  double us0 = (GAMMA-1)/(GAMMA+1)*irho0*qL[1]+(2*a0)/(GAMMA+1);
+  double us1 = (GAMMA-1)/(GAMMA+1)*irho1*qR[1]-(2*a1)/(GAMMA+1);
+  double as0 = us0;
+  double as1 = -us1;
+  double rhos0 = qL[0]*std::pow(as0/a0,2/(GAMMA-1));
+  double rhos1 = qR[0]*std::pow(as1/a1,2/(GAMMA-1));
+  double ps0 = p0*std::pow(rhos0/qL[0],GAMMA);
+  double ps1 = p1*std::pow(rhos1/qR[0],GAMMA);
+  
+  qs0[0] = rhos0;
+  qs0[1] = rhos0*us0;
+  qs0[2] = rhos0*irho0*qL[2];
+  qs0[3] = rhos0*irho0*qL[3];
+  qs0[4] = 
+  0.5*rhos0*(us0*us0+(irho0*qL[2])*(irho0*qL[2])) + 
+  ps0/(GAMMA-1);
+  
+  qs1[0] = rhos1;
+  qs1[1] = rhos1*us1;
+  qs1[2] = rhos1*irho1*qR[2];
+  qs1[3] = rhos1*irho1*qR[3];
+  qs1[4] = 
+  0.5*rhos1*(us1*us1+(irho1*qR[2])*(irho1*qR[2])) + 
+  ps1/(GAMMA-1);
+  
+  // 3. Integration along partial paths
+  double _F0[2][5] = {0.0};
+  double _F1[2][5] = {0.0};
+  double _Fs0[2][5] = {0.0};
+  double _Fs1[2][5] = {0.0};
+  double _F13[2][5] = {0.0};
+  double _F23[2][5] = {0.0};
+  double* F0[2]={_F0[0], _F0[1]};
+  double* F1[2]={_F1[0], _F1[1]};
+  double* Fs0[2]={_Fs0[0], _Fs0[1]};
+  double* Fs1[2]={_Fs1[0], _Fs1[1]};
+  double* F13[2]={_F13[0], _F13[1]};
+  double* F23[2]={_F23[0], _F23[1]};
+  
+  
+  double I1[5], I2[5], I3[5];
+  double a13 = a0 * std::pow(p_star/p0,z);
+  double a23 = a1 * std::pow(p_star/p1,z);
+  
+  solver.flux(qL, F0);
+  solver.flux(qR, F1);
+  solver.flux(qs0,Fs0);
+  solver.flux(qs1,Fs1);
+  solver.flux(q13,F13);
+  solver.flux(q23,F23);
+  
+  // 3-1. qL -> q13
+  if(irho0*qL[1] - a0 >= 0) {
+    if (u_star - a13 >= 0) {
+      for (int i = 0; i < 5; i++) {
+      I1[i] = 0;
+      }
+    } else {
+      for (int i = 0; i < 5; i++) {
+      I1[i] = _F13[0][i] - _Fs0[0][i];
+      }
+    }
+  } else {
+    if (u_star - a13 >= 0) {
+      for (int i = 0; i < 5; i++) {
+      I1[i] = _Fs0[0][i] - _F0[0][i];
+      }
+    } else {
+    for (int i = 0; i < 5; i++) {
+      I1[i] = _F13[0][i] - _F0[0][i];
+      }
+    }
+  }
+  
+  // 3-2. q13 -> q23
+  if(u_star >= 0) {
+    for (int i = 0; i < 5; i++) {
+      I2[i] = 0;
+    }
+  } else {
+    for (int i = 0; i < 5; i++) {
+      I2[i] = _F23[0][i] - _F13[0][i];
+    }
+  }
+  // 3-3. q23 -> qR
+  if(irho1*qR[1] + a1 >= 0) {
+    if (u_star + a23 >= 0) {
+      for (int i = 0; i < 5; i++) {
+      I3[i] = 0;
+      }
+    } else {
+      for (int i = 0; i < 5; i++) {
+      I3[i] = _Fs1[0][i] - _F23[0][i];
+      }
+    }
+  } else {
+    if (u_star + a23 >= 0) {
+      for (int i = 0; i < 5; i++) {
+      I3[i] = _F1[0][i] - _Fs1[0][i];
+      }
+    } else {
+    for (int i = 0; i < 5; i++) {
+      I3[i] = _F1[0][i] - _F23[0][i];
+      }
+    }
+  }
+  
+  for (int i = 0; i < 5; i++) {
+    fnL[i] = _F0[0][i] + I1[i] + I2[i] + I3[i];
+    fnR[i] = fnL[i];
+  }
+  
+  s_max = std::max(irho0*qL[1] - a0, s_max);
+  s_max = std::max(u_star, s_max);
+  s_max = std::max(irho1*qR[1] + a1, s_max);
+  
+  return s_max;
+  
+  } else {
+  // 1. calcualte fluxes normally
+  double FL2[2][5] = {0.0};
+  double FR2[2][5] = {0.0};
+  double* FL[2] = {FL2[0], FL2[1]};
+  double* FR[2] = {FR2[0], FR2[1]};
+  solver.flux(qL, FL);
+  solver.flux(qR, FR);
+  for (int i = 0; i < 5; i++) {
+      fnL[i] = FL[direction][i];
+      fnR[i] = FR[direction][i];
+  }
+  
+  double p = (GAMMA-1)*(qL[4]-0.5*1/qL[0]*(qL[1]*qL[1]+qL[2]*qL[2]+qL[3]*qL[3]));
+  double a = std::sqrt(GAMMA*p/qL[0]);
+  s_max = std::abs(qL[2]/qL[0]-a);
+  if (s_max < std::abs(qL[2]/qL[0])){
+  s_max = std::abs(qL[2]/qL[0]);
+  }
+  if (s_max < std::abs(qL[2]/qL[0]+a)){
+  s_max = std::abs(qL[2]/qL[0]+a);
+  }
+  
+  //return s_max;
+  return 0;
+  }
+  
+}
