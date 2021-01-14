@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<VTKFile type="Collection" version="0.1" byte_order="LittleEndian">
+<Collection>
+<DataSet timestep="0" group="" part="0" file="errors-0.vtu"/>
+<DataSet timestep="0.00102606" group="" part="0" file="errors-1.vtu"/>
+<DataSet timestep="0.00202582" group="" part="0" file="errors-2.vtu"/>
+<DataSet timestep="0.00302557" group="" part="0" file="errors-3.vtu"/>
+<DataSet timestep="0.00402533" group="" part="0" file="errors-4.vtu"/>
+<DataSet timestep="0.00502508" group="" part="0" file="errors-5.vtu"/>
+<DataSet timestep="0.00602483" group="" part="0" file="errors-6.vtu"/>
+<DataSet timestep="0.00702459" group="" part="0" file="errors-7.vtu"/>
+<DataSet timestep="0.00802434" group="" part="0" file="errors-8.vtu"/>
+<DataSet timestep="0.0090241" group="" part="0" file="errors-9.vtu"/>
+<DataSet timestep="0.0100238" group="" part="0" file="errors-10.vtu"/>
+<DataSet timestep="0.0110236" group="" part="0" file="errors-11.vtu"/>
+<DataSet timestep="0.0120234" group="" part="0" file="errors-12.vtu"/>
+</Collection>
+</VTKFile>

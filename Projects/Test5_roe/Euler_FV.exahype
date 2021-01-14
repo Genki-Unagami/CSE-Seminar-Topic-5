@@ -1,0 +1,45 @@
+/**
+ * This file is part of the ExaHyPE project.
+ * Copyright (c) 2016  http://exahype.eu
+ * All rights reserved.
+ *
+ * The project has received funding from the European Union's Horizon 
+ * 2020 research and innovation programme under grant agreement
+ * No 671698. For copyrights and licensing, please consult the webpage.
+ *
+ * Released under the BSD 3 Open Source License.
+ * For the full license text, see LICENSE.txt
+ */
+exahype-project Euler
+  peano-kernel-path const          = ./Peano
+  exahype-path const               = ./ExaHyPE
+  output-directory const           = ./Demonstrators/Test5_roe
+
+  computational-domain
+    dimension const         = 2
+    width                   = 1.0, 1.0, 1.0
+    offset                  = 0.0, 0.0, 0.0
+    end-time                = 0.012
+  end computational-domain
+ 
+  solver Finite-Volumes EulerSolver_FV
+    variables const    = rho:1,j:3,E:1
+    patch-size const   = 12
+    maximum-mesh-size  = 0.12
+    time-stepping      = global
+    type const         = godunov
+    terms const        = flux
+    optimisation const = generic
+    language const     = C
+    // reference either: sod,entropywave,explosion,rarefactionwave
+    constants          = reference:sod
+
+    plot vtu::Cartesian::cells::ascii ErrorPlotter
+      // absErrorL1perCell[nvar],Q[nvar],QAnalytical[nvar]
+      variables const = 5
+      time            = 0.0
+      repeat          = 0.001
+      output          = ./errors
+    end plot
+  end solver
+end exahype-project
